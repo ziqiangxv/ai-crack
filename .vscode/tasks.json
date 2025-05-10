@@ -1,0 +1,50 @@
+{
+    "tasks": [
+        {
+            "label": "build debug",
+            "type": "shell",
+            "command": "rm -rf build && mkdir -p build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug ../ && make",
+            "args": [],
+            "group": "build",
+            "presentation": {
+                "reveal": "always"
+            },
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "cmake",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "-DCMAKE_BUILD_TYPE=Debug",
+                // "-DCMAKE_CXX_FLAGS=-fmodules-ts",
+                ".."
+            ],
+            "options": {
+                "cwd": "${fileDirname}/build"
+            }
+        },
+        {
+            "label": "make",
+            "type": "shell",
+            "command": "make",
+            "args": [],
+            "options": {
+                "cwd": "${fileDirname}/build"
+            }
+        },
+        {
+            "label": "build",
+            "dependsOn": [
+                "cmake",
+                "make"
+            ],
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ],
+    "version": "2.0.0"
+}

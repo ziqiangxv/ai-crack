@@ -1,0 +1,39 @@
+workspace = "/home/gzz/dev/train_workspace"
+
+save_name = '002'
+
+device = "cuda:0"
+
+net = "vnet256"
+
+net_init_method = "kaiming"
+
+train_tactic = 'slide_window' # 'slide_window' full, random_window
+
+window_size = [96, 128, 128] # slide_window, random_window 使用
+
+slide_window_overlap = [16, 32, 32] # slide_window 使用
+
+random_window_num = 10 # random_window 使用
+
+epochs = 200
+
+batch_size = 5
+
+save_checkpoint = 1
+
+train_dataset = "/home/gzz/dev/data/train_dataset_config.txt"
+
+valid_dataset = "/home/gzz/dev/data/validate_dataset_config.txt"
+
+data_reader = "mhd_reader"
+
+lr = 0.001
+
+optimizer = "adam"
+
+lr_scheduler = "ExponentialLR"
+
+loss = "dice_loss"
+
+use_focal_loss = false
