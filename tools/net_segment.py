@@ -1,11 +1,11 @@
 import os
-from ai_crack import CrackSegment, mhd_reader, mhd_mask_dumper
+from ai_crack import CrackSegment3D, mhd_reader, mhd_mask_dumper
 
 output_dir = '/home/gzz/dev/vnet128-segment/009_H025_055KaoL_W30_D'
 
 input_dir = '/home/gzz/dev/data/downsample-4/009_H025_055KaoL_W30_D'
 
-cs = CrackSegment(
+cs = CrackSegment3D(
     model_path = '/home/gzz/dev/train_workspace/checkpoints/001/epoch_30.pth',
     net = 'vnet128',
     infer_tactic = 'slide_window',

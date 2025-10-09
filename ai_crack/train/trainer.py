@@ -34,10 +34,13 @@ class Trainer:
             epochs = config.epochs,
             batch_size = config.batch_size,
             load_checkpoint = config.load_checkpoint,
-            save_checkpoint = config.save_checkpoint,
+            save_checkpoint_begin = config.save_checkpoint_begin,
+            save_checkpoint_step = config.save_checkpoint_step,
             save_name = config.save_name,
             workspace = config.workspace,
         )
+
+        config.dump(os.path.join(self.workspace, 'train_config.toml'))
 
     def _init(
         self,
@@ -54,51 +57,78 @@ class Trainer:
         epochs: int = 200,
         batch_size: int = 128,
         load_checkpoint :Optional[int] = None,
-        save_checkpoint :Optional[int] = None,
+        save_checkpoint_begin :Optional[int] = None,
+        save_checkpoint_step :Optional[int] = None,
     ) -> None:
         """"""
 
-        self.workspace = workspace or osp.dirname(osp.dirname(osp.abspath(__file__)))
+        if hasattr(train_dataset, 'collate_fn'):
+            self.train_dataloader = DataLoader(
+                train_dataset,
+                batch_size = batch_size,
+                shuffle = True,
+                collate_fn = train_dataset.collate_fn
+            )
 
-        self.epochs = epochs
+        else:
+            self.train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-        self.batch_size = batch_size
+        if valid_dataset is None:
+            self.valid_dataloader = None
 
-        self.train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        elif hasattr(valid_dataset, 'collate_fn'):
+            self.valid_dataloader = DataLoader(
+                valid_dataset,
+                batch_size = batch_size,
+                shuffle = False,
+                collate_fn = valid_dataset.collate_fn
+            )
 
-        self.valid_dataloader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
+        else:
+            self.valid_dataloader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
 
         self.device = torch.device(device)
 
         self.model = model
 
-        if load_checkpoint is not None:
-            self._load_checkpoint(load_checkpoint)
-
-        self.model = self.model.to(self.device)
-
         self.optimizer = optimizer
-
-        self.criterion = criterion
 
         self.lr_scheduler = lr_scheduler
 
-        self.save_checkpoint = save_checkpoint if save_checkpoint is not None else 10
+        self.begin_epoch = 0
+
+        if load_checkpoint:
+            self.begin_epoch = self._load_checkpoint(load_checkpoint)
+
+        self.model = self.model.to(self.device)
+
+        self.criterion = criterion
+
+        self.save_checkpoint_begin = save_checkpoint_begin if save_checkpoint_begin is not None else 0
+
+        self.save_checkpoint_step = save_checkpoint_step if save_checkpoint_step is not None else 10
+
+        self.epochs = epochs
+
+        self.batch_size = batch_size
+
+        if not save_name:
+            save_name = 'untitiled'
+
+        self.workspace = osp.join(workspace, save_name) or osp.dirname(osp.dirname(osp.abspath(__file__)))
 
         os.makedirs(self.workspace, exist_ok = True)
 
         curves_dir = osp.join(self.workspace, 'curves')
         os.makedirs(curves_dir, exist_ok = True)
-        self.curve_writer = SummaryWriter(log_dir = osp.join(curves_dir, save_name))
+        self.curve_writer = SummaryWriter(log_dir = curves_dir)
+        self.curves_dir = curves_dir
 
-        log_dir = osp.join(self.workspace, 'logs')
-        os.makedirs(log_dir, exist_ok = True)
-        self.logger_path = osp.join(log_dir, f"{save_name}.log")
-
-        self.checkpoint_dir = osp.join(self.workspace, 'checkpoints', save_name)
-        os.makedirs(self.checkpoint_dir, exist_ok = True)
-
+        self.logger_path = osp.join(self.workspace, "train.log")
         self.logger = logger(self.logger_path)
+
+        self.checkpoint_dir = osp.join(self.workspace, 'checkpoints')
+        os.makedirs(self.checkpoint_dir, exist_ok = True)
 
 
     def train(self, epochs: int = None, epoch_prints: int = None) -> None:
@@ -112,7 +142,10 @@ class Trainer:
 
         print_stride = len(self.train_dataloader) // epoch_prints
 
-        for epoch in range(self.epochs):
+        if print_stride == 0:
+            print_stride = 1
+
+        for epoch in range(self.begin_epoch, self.epochs):
             self.model.train()
 
             loss_sum = 0
@@ -135,12 +168,13 @@ class Trainer:
 
                     print(infos)
 
-            if (epoch + 1) % self.save_checkpoint == 0:
-                self._save_checkpoint(epoch, loss_sum)
+            if (epoch + 1) % self.save_checkpoint_step == 0 and (epoch + 1) >= self.save_checkpoint_begin:
+                self._save_checkpoint(epoch + 1, loss_sum)
 
-            self.valid(epoch, "TRAIN")
+            self.valid(epoch + 1, "TRAIN")
 
-            self.valid(epoch, "VALID")
+            if self.valid_dataloader is not None:
+                self.valid(epoch + 1, "VALID")
 
 
     def valid(self, epoch: int, dataset: Literal["TRAIN", "VALID"]) -> None:
@@ -208,10 +242,6 @@ class Trainer:
 
         output = self.model(data)
 
-        # import SimpleITK as sitk
-        # sitk.WriteImage(sitk.GetImageFromArray(output.detach().cpu().numpy()[0, 0, :, :, :]), '/home/xzq/dev/zuo/tmp/mask_channel_0.mhd')
-        # sitk.WriteImage(sitk.GetImageFromArray(output.detach().cpu().numpy()[0, 1, :, :, :]),'/home/xzq/dev/zuo/tmp/mask_channel_1.mhd')
-
         loss = self.criterion(output, target)
 
         loss.backward()
@@ -264,9 +294,9 @@ class Trainer:
         if checkpoint['lr_scheduler_state_dict'] is not None:
             self.lr_scheduler.load_state_dict(checkpoint['lr_scheduler_state_dict'])
 
-        start_epoch = checkpoint['epoch']
+        begin_epoch = checkpoint['epoch']
 
-        return start_epoch
+        return begin_epoch
 
 
     def _save_checkpoint(self, epoch, loss):

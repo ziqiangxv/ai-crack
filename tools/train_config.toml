@@ -1,39 +1,101 @@
-workspace = "/home/gzz/dev/train_workspace"
+[env]
+workspace = "/home/xzq/dev/zuo/train_workspace_crack_bubble"
 
-save_name = '002'
+save_name = '001_3d_1009'
 
 device = "cuda:0"
 
-net = "vnet256"
+[training]
+net = "multi_plane_vnet_128" # multi_plane_unet2d_256, multi_plane_vnet_256, multi_plane_vnet_128
 
-net_init_method = "kaiming"
+optimizer = "adam" # sgd, adam
 
-train_tactic = 'slide_window' # 'slide_window' full, random_window
+lr_scheduler = "step_lr"  # exponential_lr, step_lr
 
-window_size = [96, 128, 128] # slide_window, random_window 使用
+# full, slide_window, random_window, slide_random_window, slice, slice_gt, slide_window_slice_gt, random_window_slice_gt
+# slice_gt, slide_window_slice_gt, random_window_slice_gt
+dataset_tactic = 'slide_window_slice_gt'
 
-slide_window_overlap = [16, 32, 32] # slide_window 使用
+dataset_augmentation = []
 
-random_window_num = 10 # random_window 使用
-
-epochs = 200
+epochs = 500
 
 batch_size = 5
 
-save_checkpoint = 1
+load_checkpoint = ''
 
-train_dataset = "/home/gzz/dev/data/train_dataset_config.txt"
+save_checkpoint_begin = 200
 
-valid_dataset = "/home/gzz/dev/data/validate_dataset_config.txt"
+save_checkpoint_step = 2
+
+train_dataset = "/home/xzq/dev/zuo/train_dataset_config.txt"
+
+valid_dataset = ""
 
 data_reader = "mhd_reader"
 
+use_cache = true # dataset cache
+
+cache_size = 100
+
+[net]
+in_channels = 1 #如果训练集里只有单种切面，=1,否则=2，切面种类要么是1要么是3
+out_channels = 3  # crack+bubble+background
+init_method = "kaiming"
+loss = 'dice_loss'
+
+[net.dice_loss]
+mode = 'multiclass'
+channel_weights = [0.1, 0.3, 0.6]
+
+[net.focal_dice_loss]
+
+[optimizer.sgd]
 lr = 0.001
+momentum = 0.9
 
-optimizer = "adam"
+[optimizer.adam]
+lr = 0.0001
 
-lr_scheduler = "ExponentialLR"
+[optimizer.lr_scheduler.step_lr]
+step_size = 10
+gamma = 0.95
 
-loss = "dice_loss"
+[optimizer.lr_scheduler.exponential_lr]
+gamma = 0.99
 
-use_focal_loss = false
+[dataset.slide_window]
+window_size = [96, 128, 128] # [z, y, x]
+window_overlap = [16, 32, 32] # [z, y, x]
+
+[dataset.slide_window_slice_gt]
+window_size = [96, 128, 128] # [z, y, x]
+window_overlap = [16, 32, 32] # [z, y, x]
+
+[dataset.random_window]
+window_size = [96, 128, 128]
+random_window_num = 10
+specific_window_num = 5
+# specific_window_anchor = [[0.1, 'null', 'null'], [0.9, 'null', 'null']] # [z, y, x]
+
+[dataset.random_window_slice_gt]
+window_size = [96, 128, 128]
+random_window_num = 10
+specific_window_num = 5
+
+[dataset.augmentation.rotate]
+prob = 0.3
+range_x = 0.1
+range_y = 0
+range_z = 0
+
+[dataset.augmentation.gaussian_noise]
+prob = 0.3
+mean = 0
+std = 0.1
+
+[dataset.augmentation.gaussian_smooth]
+prob = 0.3
+sigma_x = [0.25, 1.5]
+sigma_y = [0.25, 1.5]
+sigma_z = [0.25, 1.5]

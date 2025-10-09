@@ -122,17 +122,19 @@ class UpTransition(nn.Module):
 
 
 class OutputTransition(nn.Module):
-    def __init__(self, inChans, elu, nll):
+    def __init__(self, inChans, outChans, elu, nll):
         super(OutputTransition, self).__init__()
-        self.conv1 = nn.Conv3d(inChans, 2, kernel_size=5, padding=2)
+        self.conv1 = nn.Conv3d(inChans, outChans, kernel_size=5, padding=2)
         # self.bn1 = ContBatchNorm3d(2)
-        self.bn1 = torch.nn.BatchNorm3d(2)
-        self.conv2 = nn.Conv3d(2, 2, kernel_size=1)
-        self.relu1 = ELUCons(elu, 2)
+        self.bn1 = torch.nn.BatchNorm3d(outChans)
+        self.conv2 = nn.Conv3d(outChans, outChans, kernel_size=1)
+        self.relu1 = ELUCons(elu, outChans)
         if nll:
             self.softmax = F.log_softmax
         else:
             self.softmax = F.softmax
+
+        self.outChans = outChans
 
     def forward(self, x):
         # convolve 32 down to 2 channels
@@ -143,35 +145,17 @@ class OutputTransition(nn.Module):
         out = out.permute(0, 2, 3, 4, 1).contiguous()
         shape = out.shape
         # flatten
-        out = out.view(out.numel() // 2, 2)
+        out = out.view(out.numel() // self.outChans, self.outChans)
         out = self.softmax(out, dim = 1)
         out = out.view(shape).permute(0, 4, 1, 2, 3)
         # treat channel 0 as the predicted output
         return out
 
 
-# class OutputTransition(nn.Module):
-#     def __init__(self, inChans, elu, nll):
-#         super(OutputTransition, self).__init__()
-#         self.conv1 = nn.Conv3d(inChans, 1, kernel_size=5, padding=2)
-#         # self.bn1 = ContBatchNorm3d(2)
-#         self.bn1 = torch.nn.BatchNorm3d(1)
-#         self.conv2 = nn.Conv3d(1, 1, kernel_size=1)
-#         self.relu1 = ELUCons(elu, 1)
-#         self.sigmoid = torch.sigmoid
-
-#     def forward(self, x):
-#         # convolve 32 down to 2 channels
-#         out = self.relu1(self.bn1(self.conv1(x)))
-#         out = self.conv2(out)
-#         out = self.sigmoid(out)
-#         return out
-
-
 class VNet256(nn.Module):
     # the number of convolutions in each layer corresponds
     # to what is in the actual prototxt, not the intent
-    def __init__(self, elu=True, nll=False):
+    def __init__(self, out_channel, elu=True, nll=False):
         super(VNet256, self).__init__()
         self.in_tr = InputTransition(16, elu)
         self.down_tr32 = DownTransition(16, 1, elu)
@@ -182,24 +166,8 @@ class VNet256(nn.Module):
         self.up_tr128 = UpTransition(256, 128, 2, elu, dropout=True)
         self.up_tr64 = UpTransition(128, 64, 1, elu)
         self.up_tr32 = UpTransition(64, 32, 1, elu)
-        self.out_tr = OutputTransition(32, elu, nll)
+        self.out_tr = OutputTransition(32, out_channel, elu, nll)
 
-    # The network topology as described in the diagram
-    # in the VNet paper
-    # def __init__(self):
-    #     super(VNet, self).__init__()
-    #     self.in_tr =  InputTransition(16)
-    #     # the number of convolutions in each layer corresponds
-    #     # to what is in the actual prototxt, not the intent
-    #     self.down_tr32 = DownTransition(16, 2)
-    #     self.down_tr64 = DownTransition(32, 3)
-    #     self.down_tr128 = DownTransition(64, 3)
-    #     self.down_tr256 = DownTransition(128, 3)
-    #     self.up_tr256 = UpTransition(256, 3)
-    #     self.up_tr128 = UpTransition(128, 3)
-    #     self.up_tr64 = UpTransition(64, 2)
-    #     self.up_tr32 = UpTransition(32, 1)
-    #     self.out_tr = OutputTransition(16)
     def forward(self, x):
         out16 = self.in_tr(x)
         out32 = self.down_tr32(out16)
@@ -216,7 +184,7 @@ class VNet256(nn.Module):
 class VNet128(nn.Module):
     # the number of convolutions in each layer corresponds
     # to what is in the actual prototxt, not the intent
-    def __init__(self, elu=True, nll=False):
+    def __init__(self, out_channel, elu=True, nll=False):
         super(VNet128, self).__init__()
         self.in_tr = InputTransition(8, elu)
         self.down_tr16 = DownTransition(8, 1, elu)
@@ -227,24 +195,8 @@ class VNet128(nn.Module):
         self.up_tr64 = UpTransition(128, 64, 2, elu, dropout=True)
         self.up_tr32 = UpTransition(64, 32, 1, elu)
         self.up_tr16 = UpTransition(32, 16, 1, elu)
-        self.out_tr = OutputTransition(16, elu, nll)
+        self.out_tr = OutputTransition(16, out_channel, elu, nll)
 
-    # The network topology as described in the diagram
-    # in the VNet paper
-    # def __init__(self):
-    #     super(VNet, self).__init__()
-    #     self.in_tr =  InputTransition(16)
-    #     # the number of convolutions in each layer corresponds
-    #     # to what is in the actual prototxt, not the intent
-    #     self.down_tr32 = DownTransition(16, 2)
-    #     self.down_tr64 = DownTransition(32, 3)
-    #     self.down_tr128 = DownTransition(64, 3)
-    #     self.down_tr256 = DownTransition(128, 3)
-    #     self.up_tr256 = UpTransition(256, 3)
-    #     self.up_tr128 = UpTransition(128, 3)
-    #     self.up_tr64 = UpTransition(64, 2)
-    #     self.up_tr32 = UpTransition(32, 1)
-    #     self.out_tr = OutputTransition(16)
     def forward(self, x):
         out8 = self.in_tr(x)
         out16 = self.down_tr16(out8)

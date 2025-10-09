@@ -14,7 +14,7 @@ def logger(log_path: str) -> logging.Logger:
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
 
-    file_handler = logging.FileHandler(log_path)
+    file_handler = logging.FileHandler(log_path, mode = 'a')
     file_handler.setLevel(logging.INFO)
 
     formatter = logging.Formatter('%(asctime)s - %(message)s')
