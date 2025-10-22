@@ -4,7 +4,9 @@
 
 import typing
 import torch
+
 from ..tensor_utils import Slice, pad_image_2d, get_max_slice_size
+from ..factory import REGISTER
 
 class MultiPlaneVnet(torch.nn.Module):
     ''''''
@@ -48,3 +50,6 @@ class MultiPlaneVnet(torch.nn.Module):
 
         except:
             return super().load_state_dict(state_dict, strict = strict, assign = assign)
+
+
+REGISTER('net', 'multi_plane_vnet', MultiPlaneVnet)

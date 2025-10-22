@@ -16,7 +16,8 @@ class ImageDatasetBase(Dataset):
         reader: typing.Callable[[str], torch.Tensor],
         transform: typing.Optional[typing.Callable[[torch.Tensor], torch.Tensor]] = None,
         normalize: bool = True,
-        device: str = 'cuda:0'
+        device: str = 'cuda:0',
+        dtype: str = 'float32',
         ):
         ''''''
 
@@ -29,6 +30,8 @@ class ImageDatasetBase(Dataset):
         self.normalize = normalize
 
         self.device = device
+
+        self.dtype = dtype
 
 
     def get_data(self, image_path, transform_label: str):

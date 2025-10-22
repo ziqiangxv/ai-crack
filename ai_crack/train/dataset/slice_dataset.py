@@ -13,6 +13,7 @@ from .dataset_config import DatasetConfig
 from ...tensor_utils import pad_image_2d, get_max_slice_size, normalize_tensor, stack_slice_with_plane, TupleData
 from .image3d_dataset import SlideWindowImage3DDataset, RandomWindowImage3DDataset
 from .image_dataset_base import ImageDatasetBase
+from ...factory import REGISTER
 
 
 class SliceDataset(ImageDatasetBase):
@@ -356,3 +357,12 @@ class RandomWindowImage3DWithGTSliceDataset(RandomWindowImage3DDataset):
                 slices.append(slice_obj_copy)
 
         return slices
+
+
+REGISTER('dataset', 'slice_dataset', SliceDataset)
+
+REGISTER('dataset', 'image3d_with_gt_slice_dataset', Image3DWithGTSliceDataset)
+
+REGISTER('dataset', 'slide_window_image3d_with_gt_slice_dataset', SlideWindowImage3DWithGTSliceDataset)
+
+REGISTER('dataset', 'random_window_image3d_with_gt_slice_dataset', RandomWindowImage3DWithGTSliceDataset)

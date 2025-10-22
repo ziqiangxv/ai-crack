@@ -6,6 +6,8 @@ from torch.functional import F
 import monai.networks.nets as mnn
 from torch import nn
 
+from ..factory import REGISTER
+
 class OutputTransition(nn.Module):
     def __init__(self, outChans, nll = False):
         super().__init__()
@@ -66,6 +68,11 @@ UNet2D_256 = lambda in_channel, out_channel: UNet(
                 strides = (2, 2, 2),
                 num_res_units = 2,
             )
+
+REGISTER('net', 'unet128', UNet2D_128)
+
+REGISTER('net', 'unet256', UNet2D_256)
+
 
 if __name__ == '__main__':
     from torchinfo import summary

@@ -8,6 +8,8 @@ import torch
 from monai import transforms as T
 from monai.utils import GridSampleMode, GridSamplePadMode
 
+from ..factory import REGISTER
+
 class ApplyToImage(object):
     def __init__(self, func: typing.Callable[[float], T.transform.Transform], *args, **kwargs) -> None:
         self.trans = func(*args, **kwargs)
@@ -36,6 +38,10 @@ class ApplyToImageAndGT(object):
 RandRotate = lambda *args, **kwargs: ApplyToImageAndGT(T.RandRotate)
 RandGaussianNoise = lambda *args, **kwargs: ApplyToImage(T.RandGaussianNoise)
 RandGaussianSmooth = lambda *args, **kwargs: ApplyToImage(T.RandGaussianSmooth)
+
+REGISTER('data_augmentation', 'rotate', RandRotate)
+REGISTER('data_augmentation', 'gaussian_noise', RandGaussianNoise)
+REGISTER('data_augmentation', 'gaussian_smooth', RandGaussianSmooth)
 
 
 def get_augmentation(

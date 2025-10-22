@@ -6,7 +6,9 @@ import typing
 import torch
 import numpy as np
 import SimpleITK as sitk
-from functools import lru_cache
+
+from .factory import REGISTER
+
 
 def mhd_reader(mhd_path: str, dtype = np.uint8) -> torch.Tensor:
     ''''''
@@ -39,3 +41,10 @@ def mhd_mask_dumper(
     image.SetSpacing(element_spacing)
 
     sitk.WriteImage(image, save_mhd_path)
+
+
+REGISTER('data_reader', 'mhd_reader', mhd_reader)
+
+REGISTER('data_reader', 'mhd_reader_numpy', mhd_reader_numpy)
+
+REGISTER('data_reader', 'mhd_mask_dumper', mhd_mask_dumper)

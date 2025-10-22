@@ -12,7 +12,18 @@ import torch.utils.data
 import toml
 from dotmap import DotMap
 
-from ..net import VNet256, VNet128, DiceLoss, UNet2D_128, UNet2D_256, MultiPlaneUNet2D, MultiPlaneVnet
+from ..net import (
+    VNet256,
+    VNet128,
+    VNet32,
+    VNet64,
+    DiceLoss,
+    UNet2D_128,
+    UNet2D_256,
+    MultiPlaneUNet2D,
+    MultiPlaneVnet,
+)
+
 from .dataset import (
     Image3DDataset,
     SlideWindowImage3DDataset,
@@ -29,6 +40,7 @@ from .dataset import (
     CachedSlideWindowImage3DWithGTSliceDataset,
     CachedRandomWindowImage3DWithGTSliceDataset
 )
+
 from ..data_reader import mhd_reader
 from .data_augmentation import get_augmentation
 
@@ -97,8 +109,30 @@ class TrainConfig:
         elif net_name == 'multi_plane_vnet_128':
             net = MultiPlaneVnet(vnet = VNet128(out_channel = out_channels))
 
+        elif net_name == 'multi_plane_vnet_32':
+            net = MultiPlaneVnet(vnet = VNet32(out_channel = out_channels))
+
+        elif net_name == 'multi_plane_vnet_64':
+            net = MultiPlaneVnet(vnet = VNet64(out_channel = out_channels))
+
         else:
             raise NotImplementedError('')
+
+        if not self.config.training.use_amp:
+            if self.config.training.dtype == 'float16':
+                net = net.half()
+
+            elif self.config.training.dtype == 'float32':
+                net = net.float()
+
+            elif self.config.training.dtype == 'bfloat16':
+                net = net.bfloat16()
+
+            elif self.config.training.dtype == 'float64':
+                net = net.double()
+
+            else:
+                raise NotImplementedError('')
 
         init_method_map = {
             'kaiming': torch.nn.init.kaiming_normal_,
@@ -197,7 +231,10 @@ class TrainConfig:
 
         lr_scheduler_name = self.config.training.lr_scheduler.lower()
 
-        if lr_scheduler_name == 'exponential_lr':
+        if lr_scheduler_name == '':
+            self._obj_lr_scheduler = None
+
+        elif lr_scheduler_name == 'exponential_lr':
             gamma = self.config.optimizer.lr_scheduler.exponential_lr.gamma
 
             self._obj_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.obj_optimizer, gamma = gamma)
@@ -208,9 +245,60 @@ class TrainConfig:
             gamma = self.config.optimizer.lr_scheduler.step_lr.gamma
 
             self._obj_lr_scheduler = torch.optim.lr_scheduler.StepLR(
-                self.obj_optimizer,
-                step_size = step_size,
-                gamma = gamma)
+                    self.obj_optimizer,
+                    step_size = step_size,
+                    gamma = gamma
+                )
+
+        elif lr_scheduler_name == 'multi_step_lr':
+            milestones = self.config.optimizer.lr_scheduler.multi_step_lr.milestones
+
+            gamma = self.config.optimizer.lr_scheduler.multi_step_lr.gamma
+
+            self._obj_lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
+                    self.obj_optimizer,
+                    milestones = milestones,
+                    gamma = gamma
+                )
+
+        elif lr_scheduler_name == 'cosine_annealing_lr':
+            T_max = self.config.optimizer.lr_scheduler.cosine_annealing_lr.T_max
+
+            eta_min = self.config.optimizer.lr_scheduler.cosine_annealing_lr.eta_min
+
+            self._obj_lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                    self.obj_optimizer,
+                    T_max = T_max,
+                    eta_min = eta_min
+                )
+
+        elif lr_scheduler_name == 'cosine_annealing_warm_restarts':
+            T_0 = self.config.optimizer.lr_scheduler.cosine_annealing_warm_restarts.T_0
+
+            T_mult = self.config.optimizer.lr_scheduler.cosine_annealing_warm_restarts.T_mult
+
+            eta_min = self.config.optimizer.lr_scheduler.cosine_annealing_warm_restarts.eta_min
+
+            self._obj_lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+                    self.obj_optimizer,
+                    T_0 = T_0,
+                    T_mult = T_mult,
+                    eta_min = eta_min
+                )
+
+        elif lr_scheduler_name == 'linear_lr':
+            start_factor = self.config.optimizer.lr_scheduler.linear_lr.start_factor
+
+            end_factor = self.config.optimizer.lr_scheduler.linear_lr.end_factor
+
+            total_iters = self.config.optimizer.lr_scheduler.linear_lr.total_iters
+
+            self._obj_lr_scheduler = torch.optim.lr_scheduler.LinearLR(
+                    self.obj_optimizer,
+                    start_factor = start_factor,
+                    end_factor = end_factor,
+                    total_iters = total_iters
+                )
 
         else:
             raise NotImplementedError('')

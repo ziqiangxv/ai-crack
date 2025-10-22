@@ -6,7 +6,17 @@ import typing
 import torch
 import os
 import torch.nn.functional as F
-from .net import VNet128, VNet256, UNet2D_128, UNet2D_256, MultiPlaneUNet2D
+from .net import (
+    VNet128,
+    VNet256,
+    UNet2D_128,
+    UNet2D_256,
+    MultiPlaneUNet2D,
+    MultiPlaneVnet,
+    VNet32,
+    VNet64,
+)
+
 from .tensor_utils import (
     normalize_tensor,
     pad_image_2d,
@@ -39,20 +49,57 @@ class CrackSegment3D:
 
         if infer_tactic == 'slide_window':
             assert window_size is not None, 'window_size must be specified when infer_mode is slide_window'
+
             assert overlap is not None, 'overlap must be specified when infer_mode is slide_window'
+
             assert overlap_fusion_tactic in ('average', 'max'), \
                 'overlap_merge_tactic must be specified "average" or "mean" when infer_mode is slide_window'
+
             assert len(window_size) == 3, 'window_size must be a tuple of length 3'
+
             assert len(overlap) == 3, 'overlap must be a tuple of length 3'
 
         if net == 'vnet256':
             net = VNet256(out_channel = net_out_channel).to(device)
+
+            net.load_state_dict(torch.load(model_path, map_location = device)['model_state_dict'])
+
         elif net == 'vnet128':
             net = VNet128(out_channel = net_out_channel).to(device)
+
+            net.load_state_dict(torch.load(model_path, map_location = device)['model_state_dict'])
+
+        elif net == 'multi_plane_vnet_128':
+            net = MultiPlaneVnet(VNet128(out_channel = net_out_channel)).to(device)
+
+            net.load_state_dict(torch.load(model_path, map_location = device)['model_state_dict'])
+
+            net = net.vnet
+
+        elif net == 'multi_plane_vnet_256':
+            net = MultiPlaneVnet(VNet256(out_channel = net_out_channel)).to(device)
+
+            net.load_state_dict(torch.load(model_path, map_location = device)['model_state_dict'])
+
+            net = net.vnet
+
+        elif net == 'multi_plane_vnet_32':
+            net = MultiPlaneVnet(VNet32(out_channel = net_out_channel)).to(device)
+
+            net.load_state_dict(torch.load(model_path, map_location = device)['model_state_dict'])
+
+            net = net.vnet
+
+        elif net == 'multi_plane_vnet_64':
+            net = MultiPlaneVnet(VNet64(out_channel = net_out_channel)).to(device)
+
+            net.load_state_dict(torch.load(model_path, map_location = device)['model_state_dict'])
+
+            net = net.vnet
+
         else:
             raise ValueError(f'net {net} not supported')
 
-        net.load_state_dict(torch.load(model_path, map_location = device)['model_state_dict'])
         net.eval()
 
         self.net = net
@@ -65,6 +112,7 @@ class CrackSegment3D:
         self.reader = input_image_reader
         self.dumper = output_mask_dumper
         self.element_spacing = element_spacing
+        self.net_out_channel = net_out_channel
 
     @torch.no_grad()
     def __call__(self, image_path: str) -> torch.Tensor:
@@ -107,7 +155,7 @@ class CrackSegment3D:
         step_h = win_h - self.overlap[1]
         step_w = win_w - self.overlap[2]
 
-        result_shape = [B, C + 1, D, H, W]
+        result_shape = [B, self.net_out_channel, D, H, W]
         result = torch.zeros(result_shape, device = self.device)
         count = torch.zeros(result_shape, device = self.device)
 
@@ -169,7 +217,10 @@ class CrackSegment2D:
         output_mask_dumper: typing.Callable[[torch.Tensor, str], None],
         fusion_tactic: str = 'max',
         element_spacing: typing.Optional[typing.Tuple[float, float, float]] = None,
-        device: str = 'cuda:0'):
+        device: str = 'cuda:0',
+        dtype: str = 'float32',
+        use_amp: bool = False,
+        ):
         ''''''
 
          # 验证方位参数
@@ -197,8 +248,31 @@ class CrackSegment2D:
 
             net = net.unet
 
+        elif net == 'multi_plane_unet2d_128':
+            net = MultiPlaneUNet2D(UNet2D_128(in_channel = net_in_channel, out_channel = net_out_channel)).to(device)
+
+            net.load_state_dict(torch.load(model_path, map_location = device)['model_state_dict'])
+
+            net = net.unet
+
         else:
             raise ValueError(f'net {net} not supported')
+
+        if not use_amp:
+            if dtype == 'float16':
+                net = net.half()
+
+            elif dtype == 'float32':
+                net = net.float()
+
+            elif dtype == 'bfloat16':
+                net = net.bfloat16()
+
+            elif dtype == 'float64':
+                net = net.double()
+
+            else:
+                raise NotImplementedError('')
 
         net.eval()
 
@@ -213,6 +287,8 @@ class CrackSegment2D:
         self.net_out_channel = net_out_channel
         self.net_in_channel = net_in_channel
         self.slice_batch_size = slice_batch_size
+        self.use_amp = use_amp
+        self.dtype = getattr(torch, dtype)
 
     @torch.no_grad()
     def __call__(self, image_path: str) -> torch.Tensor:
@@ -273,7 +349,7 @@ class CrackSegment2D:
                 slices = stack_slice_with_plane(slices, 'xy')
 
             # 模型预测
-            probs = self.net(slices.contiguous())
+            probs = self._forward(slices.contiguous())
             probs = unpad_image_2d(probs, src_size)
             prob_volume[start_idx : end_idx, ...] = probs
 
@@ -301,7 +377,7 @@ class CrackSegment2D:
                 slices = stack_slice_with_plane(slices, 'xz')
 
             # 模型预测
-            probs = self.net(slices.contiguous())
+            probs = self._forward(slices.contiguous())
             probs = unpad_image_2d(probs, src_size)
             prob_volume[start_idx : end_idx, ...] = probs
 
@@ -329,7 +405,7 @@ class CrackSegment2D:
                 slices = stack_slice_with_plane(slices, 'yz')
 
             # 模型预测
-            probs = self.net(slices.contiguous())
+            probs = self._forward(slices.contiguous())
             probs = unpad_image_2d(probs, src_size)
             prob_volume[start_idx : end_idx, ...] = probs
 
@@ -375,3 +451,12 @@ class CrackSegment2D:
 
     def _featuremap_to_mask(self, featuremap: torch.Tensor) -> torch.Tensor:
         return torch.argmax(featuremap, dim=1).squeeze()
+
+    def _forward(self, data):
+        if self.use_amp:
+            with torch.autocast(device_type = self.device, dtype = self.dtype):
+                output = self.net(data)
+        else:
+            output = self.net(data)
+
+        return output

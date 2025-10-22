@@ -13,5 +13,5 @@ train_config_path = os.path.join(this_dir, 'train_config.toml')
 config = TrainConfig(train_config_path)
 
 trainer = Trainer(config)
-trainer.train(epoch_prints = 5)
+trainer.train(epoch_prints = 10)
 

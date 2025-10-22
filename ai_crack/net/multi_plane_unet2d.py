@@ -3,7 +3,6 @@
 ''''''
 
 import typing
-import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -11,16 +10,17 @@ from torch.utils.checkpoint import checkpoint
 
 from ..tensor_utils import (
     get_max_slice_size,
-    normalize_tensor,
     pad_image_2d,
     unpad_image_2d,
     stack_slice_with_plane,
     Slice
 )
 
+from ..factory import REGISTER
+
 
 class MultiPlaneUNet2D(nn.Module):
-    def __init__(self, unet2d: nn.Module, unet2d_batch_size: int = 48, fusion_tactic: str = 'mean'):
+    def __init__(self, unet2d: nn.Module, unet2d_batch_size: int = 16, fusion_tactic: str = 'mean'):
         super().__init__()
 
         self.unet = unet2d
@@ -102,9 +102,15 @@ class MultiPlaneUNet2D(nn.Module):
 
         xy_probs = self.process_xy_plane(image3d)
 
+        torch.cuda.empty_cache()
+
         xz_probs = self.process_xz_plane(image3d)
 
+        torch.cuda.empty_cache()
+
         yz_probs = self.process_yz_plane(image3d)
+
+        torch.cuda.empty_cache()
 
         return xy_probs, xz_probs, yz_probs
 
@@ -281,3 +287,5 @@ class MultiPlaneUNet2D(nn.Module):
     def checkpoint_fn(self, model, x):
         # x.requires_grad_(True)
         return model(x)
+
+REGISTER('net', 'multi_plane_unet2d', MultiPlaneUNet2D)

@@ -9,6 +9,7 @@ from torch.utils.data import Dataset
 from .dataset_config import DatasetConfig
 from ...tensor_utils import normalize_tensor
 from .image_dataset_base import ImageDatasetBase
+from ...factory import REGISTER
 
 
 class Image3DDataset(ImageDatasetBase):
@@ -174,3 +175,10 @@ class RandomWindowImage3DDataset(ImageDatasetBase):
         self._random_window = window
 
         return window_image, window_gt
+
+
+REGISTER('dataset', 'image3d_dataset', Image3DDataset)
+
+REGISTER('dataset', 'slide_window_image3d_dataset', SlideWindowImage3DDataset)
+
+REGISTER('dataset', 'random_window_image3d_dataset', RandomWindowImage3DDataset)

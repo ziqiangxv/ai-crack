@@ -1,30 +1,33 @@
 [env]
 workspace = "/home/xzq/dev/zuo/train_workspace_crack_bubble"
 
-save_name = '001_3d_1009'
+save_name = 'unet2d_128_1' # 001_3d_1009_vnet128_1
 
 device = "cuda:0"
 
 [training]
-net = "multi_plane_vnet_128" # multi_plane_unet2d_256, multi_plane_vnet_256, multi_plane_vnet_128
+net = "multi_plane_unet2d_128" # multi_plane_unet2d_256, multi_plane_vnet_256, multi_plane_vnet_128
 
 optimizer = "adam" # sgd, adam
 
-lr_scheduler = "step_lr"  # exponential_lr, step_lr
+# exponential_lr, multi_step_lr, step_lr, cosine_annealing_lr,
+# cosine_annealing_warm_restarts, linear_lr
+lr_scheduler = ""
 
-# full, slide_window, random_window, slide_random_window, slice, slice_gt, slide_window_slice_gt, random_window_slice_gt
+# full, slide_window, random_window, slide_random_window,
+# slice, slice_gt, slide_window_slice_gt, random_window_slice_gt
 # slice_gt, slide_window_slice_gt, random_window_slice_gt
-dataset_tactic = 'slide_window_slice_gt'
+dataset_tactic = 'slice_gt'
 
 dataset_augmentation = []
 
-epochs = 500
+epochs = 2000
 
-batch_size = 5
+batch_size = 1
 
-load_checkpoint = ''
+load_checkpoint = '/home/xzq/dev/zuo/train_workspace_crack_bubble/unet2d_128_1/checkpoints/epoch_1848.pth'
 
-save_checkpoint_begin = 200
+save_checkpoint_begin = 100
 
 save_checkpoint_step = 2
 
@@ -36,7 +39,13 @@ data_reader = "mhd_reader"
 
 use_cache = true # dataset cache
 
-cache_size = 100
+cache_size = 10
+
+use_amp = true
+
+use_scale = true
+
+dtype = 'float16'
 
 [net]
 in_channels = 1 #如果训练集里只有单种切面，=1,否则=2，切面种类要么是1要么是3
@@ -46,7 +55,7 @@ loss = 'dice_loss'
 
 [net.dice_loss]
 mode = 'multiclass'
-channel_weights = [0.1, 0.3, 0.6]
+channel_weights = [0.2, 0.3, 0.5]
 
 [net.focal_dice_loss]
 
@@ -57,12 +66,30 @@ momentum = 0.9
 [optimizer.adam]
 lr = 0.0001
 
+[optimizer.lr_scheduler.linear_lr]
+start_factor = 1
+end_factor = 0.01
+total_iters = 1000
+
 [optimizer.lr_scheduler.step_lr]
 step_size = 10
 gamma = 0.95
 
+[optimizer.lr_scheduler.multi_step_lr]
+milestones = [100, 200, 300]
+gamma = 0.5
+
 [optimizer.lr_scheduler.exponential_lr]
 gamma = 0.99
+
+[optimizer.lr_scheduler.cosine_annealing_lr]
+T_max = 100
+eta_min = 0.00001
+
+[optimizer.lr_scheduler.cosine_annealing_warm_restarts]
+T_0 = 200
+T_mult = 2
+eta_min = 0.00001
 
 [dataset.slide_window]
 window_size = [96, 128, 128] # [z, y, x]

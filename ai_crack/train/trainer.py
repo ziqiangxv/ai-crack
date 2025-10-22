@@ -31,6 +31,9 @@ class Trainer:
             valid_dataset = config.obj_valid_dataset,
             lr_scheduler = config.obj_lr_scheduler,
             device = config.device,
+            dtype = config.dtype,
+            use_amp = config.use_amp,
+            use_scale = config.use_scale,
             epochs = config.epochs,
             batch_size = config.batch_size,
             load_checkpoint = config.load_checkpoint,
@@ -52,8 +55,11 @@ class Trainer:
         *,
         train_dataset: torch.utils.data.Dataset,
         valid_dataset: torch.utils.data.Dataset,
-        lr_scheduler = None,
+        lr_scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,
         device: str = 'cuda:0',
+        dtype: str = 'float32',
+        use_amp: bool = False,
+        use_scale: bool = False,
         epochs: int = 200,
         batch_size: int = 128,
         load_checkpoint :Optional[int] = None,
@@ -87,7 +93,16 @@ class Trainer:
         else:
             self.valid_dataloader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
 
-        self.device = torch.device(device)
+        self.device = device
+
+        self.dtype = getattr(torch, dtype)
+
+        self.use_amp = use_amp
+
+        self.use_scale = use_scale
+
+        if self.use_scale:
+            self.scaler = torch.amp.GradScaler(device = self.device)
 
         self.model = model
 
@@ -151,7 +166,11 @@ class Trainer:
             loss_sum = 0
 
             for batch_idx, (data, target) in enumerate(self.train_dataloader):
-                data, target = data.to(self.device), target.to(self.device)
+                if self.use_amp:
+                    data, target = data.to(self.device), target.to(self.device)
+
+                else:
+                    data, target = data.to(self.dtype).to(self.device), target.to(self.dtype).to(self.device)
 
                 loss = self._train(data, target)
 
@@ -176,6 +195,40 @@ class Trainer:
             if self.valid_dataloader is not None:
                 self.valid(epoch + 1, "VALID")
 
+            if self.lr_scheduler is not None:
+                self.lr_scheduler.step()
+
+
+    def _train(self, data: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        """"""
+
+        self.optimizer.zero_grad()
+
+        if self.use_amp:
+            with torch.autocast(device_type = self.device, dtype = self.dtype):
+                output = self.model(data)
+
+                loss = self.criterion(output, target)
+
+        else:
+            output = self.model(data)
+
+            loss = self.criterion(output, target)
+
+        if self.use_scale:
+            self.scaler.scale(loss).backward()
+
+            self.scaler.step(self.optimizer)
+
+            self.scaler.update()
+
+        else:
+            loss.backward()
+
+            self.optimizer.step()
+
+        return loss
+
 
     def valid(self, epoch: int, dataset: Literal["TRAIN", "VALID"]) -> None:
         """"""
@@ -198,7 +251,11 @@ class Trainer:
 
         self.curve_writer.add_scalar(f"Loss/{dataset}", test_loss, epoch)
 
-        infos = f"VALID | EPOCH {epoch}/{self.epochs} | {dataset} DATASET | AVG_LOSS: {test_loss:0.6f}"
+        lr = self._get_lr()
+
+        self.curve_writer.add_scalar(f"LR/{dataset}", lr, epoch)
+
+        infos = f"VALID | EPOCH {epoch}/{self.epochs} | {dataset} DATASET | LR: {lr:0.6f} | AVG_LOSS: {test_loss:0.6f}"
 
         self.logger.info(color(infos))
 
@@ -235,22 +292,6 @@ class Trainer:
         return self.model
 
 
-    def _train(self, data: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        """"""
-
-        self.optimizer.zero_grad()
-
-        output = self.model(data)
-
-        loss = self.criterion(output, target)
-
-        loss.backward()
-
-        self.optimizer.step()
-
-        return loss
-
-
     def _read_log(self, mode: str = 'TRAIN'):
         ''''''
 
@@ -280,10 +321,8 @@ class Trainer:
         return epochs, losses
 
 
-    def _load_checkpoint(self, epoch):
+    def _load_checkpoint(self, checkpoint_path):
         ''''''
-
-        checkpoint_path = os.path.join(self.checkpoint_dir, f'epoch_{epoch}.pth')
 
         checkpoint = torch.load(checkpoint_path)
 
@@ -314,3 +353,6 @@ class Trainer:
             },
             checkpoint_file
         )
+
+    def _get_lr(self):
+        return self.optimizer.param_groups[0]['lr']

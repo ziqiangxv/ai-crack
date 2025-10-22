@@ -6,6 +6,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ..factory import REGISTER
+
 
 def passthrough(x, **kwargs):
     return x
@@ -209,3 +211,70 @@ class VNet128(nn.Module):
         out = self.up_tr16(out, out8)
         out = self.out_tr(out)
         return out
+
+class VNet64(nn.Module):
+    # the number of convolutions in each layer corresponds
+    # to what is in the actual prototxt, not the intent
+    def __init__(self, out_channel, elu=True, nll=False):
+        super(VNet64, self).__init__()
+        self.in_tr = InputTransition(4, elu)
+        self.down_tr8 = DownTransition(4, 1, elu)
+        self.down_tr16 = DownTransition(8, 2, elu)
+        self.down_tr32 = DownTransition(16, 3, elu, dropout=True)
+        self.down_tr64 = DownTransition(32, 2, elu, dropout=True)
+        self.up_tr64 = UpTransition(64, 64, 2, elu, dropout=True)
+        self.up_tr32 = UpTransition(64, 32, 2, elu, dropout=True)
+        self.up_tr16 = UpTransition(32, 16, 1, elu)
+        self.up_tr8 = UpTransition(16, 8, 1, elu)
+        self.out_tr = OutputTransition(8, out_channel, elu, nll)
+
+    def forward(self, x):
+        out4 = self.in_tr(x)
+        out8 = self.down_tr8(out4)
+        out16 = self.down_tr16(out8)
+        out32 = self.down_tr32(out16)
+        out64 = self.down_tr64(out32)
+        out = self.up_tr64(out64, out32)
+        out = self.up_tr32(out, out16)
+        out = self.up_tr16(out, out8)
+        out = self.up_tr8(out, out4)
+        out = self.out_tr(out)
+        return out
+
+class VNet32(nn.Module):
+    # the number of convolutions in each layer corresponds
+    # to what is in the actual prototxt, not the intent
+    def __init__(self, out_channel, elu=True, nll=False):
+        super(VNet32, self).__init__()
+        self.in_tr = InputTransition(2, elu)
+        self.down_tr4 = DownTransition(2, 1, elu)
+        self.down_tr8 = DownTransition(4, 2, elu)
+        self.down_tr16 = DownTransition(8, 3, elu, dropout=True)
+        self.down_tr32 = DownTransition(16, 2, elu, dropout=True)
+        self.up_tr32 = UpTransition(32, 32, 2, elu, dropout=True)
+        self.up_tr16 = UpTransition(32, 16, 2, elu, dropout=True)
+        self.up_tr8 = UpTransition(16, 8, 1, elu)
+        self.up_tr4 = UpTransition(8, 4, 1, elu)
+        self.out_tr = OutputTransition(4, out_channel, elu, nll)
+
+    def forward(self, x):
+        out2 = self.in_tr(x)
+        out4 = self.down_tr4(out2)
+        out8 = self.down_tr8(out4)
+        out16 = self.down_tr16(out8)
+        out32 = self.down_tr32(out16)
+        out = self.up_tr32(out32, out16)
+        out = self.up_tr16(out, out8)
+        out = self.up_tr8(out, out4)
+        out = self.up_tr4(out, out2)
+        out = self.out_tr(out)
+        return out
+
+
+REGISTER('net', 'vnet256', VNet256)
+
+REGISTER('net', 'vnet128', VNet128)
+
+REGISTER('net', 'vnet64', VNet64)
+
+REGISTER('net', 'vnet32', VNet32)

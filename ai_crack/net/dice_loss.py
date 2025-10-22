@@ -7,6 +7,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ..factory import REGISTER
+
 class DiceLoss(nn.Module):
     def __init__(
         self,
@@ -156,3 +158,6 @@ class DiceLoss(nn.Module):
             weights = torch.tensor([self.channel_weights] * dice.shape[0], device=y_pred.device, requires_grad=False)
 
             return (weights * dice).sum(axis=1).mean()
+
+
+REGISTER('loss', 'dice_loss', DiceLoss)
